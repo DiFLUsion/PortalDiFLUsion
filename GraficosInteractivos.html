@@ -126,7 +126,7 @@
 
     <!-- GRAFICO 1 -->
     <div class="chart-block">
-      <div class="chart-title">Gráfico 1: Evolución temporal del riesgo</div>
+      <div class="chart-title">Gráfico 1: Evolución temporal del riesgo frente a la temperatura</div>
       <div class="control-row">
         <label>Eje primario Y:</label>
         <select id="ySelect1"></select>
@@ -178,7 +178,7 @@
 
     <!-- GRAFICO 3 -->
     <div class="chart-block">
-      <div class="chart-title">Gráfico 3</div>
+      <div class="chart-title">Gráfico 3: Evolución temporal del riesgo frente a la probabilidad de movimiento</div>
       <div class="control-row">
         <label>Y (Primario):</label>
         <select id="ySelect3"></select>
@@ -283,11 +283,93 @@
       <canvas id="chart6" class="chart-canvas"></canvas>
     </div>
 
+
+        <!-- GRAFICO 7 -->
+        <div class="chart-block">
+          <div class="chart-title">Gráfico 7</div>
+          <div class="control-row">
+            <label>Y (Primario):</label>
+            <select id="ySelect7"></select>
+            <label>Tipo Y:</label>
+            <select id="yType7">
+              <option value="line">Líneas</option>
+              <option value="bar">Columnas</option>
+
+            </select>
+          </div>
+          <div class="control-row">
+            <label>Z (Secundario):</label>
+            <select id="zSelect7">
+              <option value="none">Ninguno</option>
+            </select>
+            <label>Tipo Z:</label>
+            <select id="zType7">
+              <option value="line">Líneas</option>
+              <option value="bar">Columnas</option>
+
+            </select>
+          </div>
+          <canvas id="chart7" class="chart-canvas"></canvas>
+        </div>
+
+
+           <!-- GRAFICO 8 -->
+           <div class="chart-block">
+            <div class="chart-title">Gráfico 8</div>
+            <div class="control-row">
+              <label>Y (Primario):</label>
+              <select id="ySelect8"></select>
+              <label>Tipo Y:</label>
+              <select id="yType8">
+                <option value="line">Líneas</option>
+                <option value="bar">Columnas</option>
+
+              </select>
+            </div>
+            <div class="control-row">
+              <label>Z (Secundario):</label>
+              <select id="zSelect8">
+                <option value="none">Ninguno</option>
+              </select>
+              <label>Tipo Z:</label>
+              <select id="zType8">
+                <option value="line">Líneas</option>
+                <option value="bar">Columnas</option>
+
+              </select>
+            </div>
+            <canvas id="chart8" class="chart-canvas"></canvas>
+          </div>
+
   </div>
 
   <script>
+          const fieldColors = {
+  "valor_medio": "rgba(255,0,0,0.7)", // Rojo (Valores)
+  "valor_mediana": "rgba(255,0,0,0.7)", // Rojo (Valores)
+  "A0": "rgba(255,165,0,0.7)", // Naranja
+  "A1": "rgba(255,205,86,0.7)", // Amarillo
+  "A2": "rgba(75,192,192,0.7)", // Verde azulado
+  "A3": "rgba(54,162,235,0.7)", // Azul
+  "A4": "rgba(153,102,255,0.7)", // Morado
+  "A5": "rgba(201,203,207,0.7)", // Gris
+  "num_anillas": "rgba(255,140,0,0.7)", // Naranja oscuro
+  "num_brotes": "rgba(144,238,144,0.7)", // Verde claro
+  "D": "rgba(139,69,19,0.7)", // Marrón
+  "W": "rgba(0,128,0,0.7)", // Verde oscuro
+  "C": "rgba(0,0,255,0.7)", // Azul fuerte
+  "temperatura_mean": "rgba(75,192,192,0.7)", // Rojo (Valores)
+  "temperatura_median": "rgba(75,192,192,0.7)", // Rojo (Valores)
+  "dias_superviviencia_mean": "rgba(30,144,255,0.7)", // Azul profundo
+  "dias_superviviencia_median": "rgba(0,191,255,0.7)", // Azul celeste
+  "fenologia_mean": "rgba(75,0,130,0.7)", // Índigo
+  "fenologia_median": "rgba(148,0,211,0.7)" // Violeta oscuro
+};
+
+
     let globalData = [];
     let chart1=null, chart2=null, chart3=null, chart4=null, chart5=null, chart6=null;
+    let chart7=null, chart8=null;
 
     const fileInput = document.getElementById("fileInput");
     const infoRuta  = document.getElementById("infoRuta");
@@ -301,8 +383,43 @@
     document.getElementById("globalXSelect").style.display = "none";
     document.getElementById("syncXCheckbox").style.display = "none";
 
+    const fieldFuera = new Set([
+  "numeracion", "valor_std", "temperatura_std", "fenologia_std", "dias_superviviencia_std", "num_alertas"
+]);
+
+      const fieldMapping = {
+    "lunes": "Fecha",
+
+    "valor_medio": "Riesgo - Media",
+    "valor_mediana": "Riesgo - Mediana",
+
+    "A0": "Riesgo A0",
+    "A1": "Riesgo A1",
+    "A2": "Riesgo A2",
+    "A3": "Riesgo A3",
+    "A4": "Riesgo A4",
+    "A5": "Riesgo A5",
+    "NO ALERTA": "Sin Alerta",
+
+    "num_anillas": "Recuento de Anillas",
+    "num_brotes": "Recuento de Brotes",
+
+    "D": "Doméstico (D)",
+    "W": "Silvestre (W)",
+    "C": "Cautivo (C)",
+
+    "num_alertas": "Número de Alertas",
+
+    "temperatura_mean": "Temperatura - Media",
+    "temperatura_median": "Temperatura - Mediana",
+
+    "dias_superviviencia_mean": "Tiempo Supervivencia - Media",
+    "dias_superviviencia_median": "Tiempo Supervivencia - Mediana",
 
 
+    "fenologia_mean": "Probabilidad movimiento - Media",
+    "fenologia_median": "Probabilidad movimiento - Mediana"
+  };
 
     // En lugar de un xSelect por gráfico, forzamos su uso a "lunes"
     // o lo que el usuario escoja en el globalXSelect.
@@ -322,11 +439,17 @@
       { yFilter: (h) => true,
         zFilter: (h) => true },
       // G5
-      { yFilter: (h) => h.toLowerCase().startsWith("num_anillas"),
-        zFilter: (h) => true },
+      { yFilter: (h) => h.toLowerCase().startsWith("valor"),
+        zFilter: (h) => h.toLowerCase().startsWith("num") },
       // G6
-      { yFilter: (h) => h.toLowerCase().startsWith("temperatura"),
-        zFilter: (h) => h.toLowerCase().startsWith("dias") },
+      { yFilter: (h) => h.toLowerCase().includes("anillas"),
+        zFilter: (h) => true },
+              // G7
+      { yFilter: (h) => true,
+        zFilter: (h) => true },
+              // G8
+      { yFilter: (h) => true,
+        zFilter: (h) => true },
     ];
 
 
@@ -338,6 +461,8 @@
       document.getElementById("ySelect4"),
       document.getElementById("ySelect5"),
       document.getElementById("ySelect6"),
+      document.getElementById("ySelect7"),
+      document.getElementById("ySelect8"),
     ];
     const yTypes = [
       document.getElementById("yType1"),
@@ -346,6 +471,8 @@
       document.getElementById("yType4"),
       document.getElementById("yType5"),
       document.getElementById("yType6"),
+      document.getElementById("yType7"),
+      document.getElementById("yType8"),
     ];
     const zSelects = [
       document.getElementById("zSelect1"),
@@ -354,6 +481,8 @@
       document.getElementById("zSelect4"),
       document.getElementById("zSelect5"),
       document.getElementById("zSelect6"),
+      document.getElementById("zSelect7"),
+      document.getElementById("zSelect8"),
     ];
     const zTypes = [
       document.getElementById("zType1"),
@@ -362,6 +491,8 @@
       document.getElementById("zType4"),
       document.getElementById("zType5"),
       document.getElementById("zType6"),
+      document.getElementById("zType7"),
+      document.getElementById("zType8"),
     ];
 
     // Canvas
@@ -372,6 +503,8 @@
       document.getElementById("chart4"),
       document.getElementById("chart5"),
       document.getElementById("chart6"),
+      document.getElementById("chart7"),
+      document.getElementById("chart8"),
     ];
 
     // Eventos
@@ -466,26 +599,28 @@
       if(!globalData.length) return;
       const headers = globalData[0];
 
-      for(let i=0;i<6;i++){
+      for(let i=0;i<8;i++){
         ySelects[i].innerHTML="";
         zSelects[i].innerHTML="<option value='none'>Ninguno</option>";
 
         const { yFilter, zFilter } = conditions[i];
 
         headers.forEach(h=>{
-          if(yFilter(h)){
-            const optY = document.createElement("option");
-            optY.value = h;
-            optY.text  = h;
-            ySelects[i].appendChild(optY);
-          }
-          if(zFilter(h)){
-            const optZ = document.createElement("option");
-            optZ.value = h;
-            optZ.text  = h;
-            zSelects[i].appendChild(optZ);
-          }
-        });// Seleccionar por defecto el eje secundario
+  if(!fieldFuera.has(h)) {  // Filtra los valores que no deben aparecer
+    if(yFilter(h)){
+      const optY = document.createElement("option");
+      optY.value = h;
+      optY.text  = fieldMapping[h] || h;
+      ySelects[i].appendChild(optY);
+    }
+    if(zFilter(h)){
+      const optZ = document.createElement("option");
+      optZ.value = h;
+      optZ.text  = fieldMapping[h] || h;
+      zSelects[i].appendChild(optZ);
+    }
+  }
+});
     if (i === 0 || i === 2 || i ===5) { // Gráfico 1 y Gráfico 3
       const defaultZ = [...zSelects[i].options].find(opt => opt.value !== "none");
       if (defaultZ) zSelects[i].value = defaultZ.value;
@@ -541,6 +676,8 @@
       if(chart4) chart4.destroy();
       if(chart5) chart5.destroy();
       if(chart6) chart6.destroy();
+      if(chart7) chart7.destroy();
+      if(chart8) chart8.destroy();
 
       chart1 = drawSingleChart(chartCanvases[0], 0, "Gráfico 1");
       chart2 = drawChart2     (chartCanvases[1], 1, "Gráfico 2");
@@ -548,6 +685,8 @@
       chart4 = drawChart4(chartCanvases[3], 3, "Gráfico 4");
       chart5 = drawSingleChart(chartCanvases[4], 4, "Gráfico 5");
       chart6 = drawSingleChart(chartCanvases[5], 5, "Gráfico 6");
+      chart7 = drawSingleChart(chartCanvases[6], 6, "Gráfico 7");
+      chart8 = drawSingleChart(chartCanvases[7], 7, "Gráfico 8");
     }
 
     // Función genérica para gráficos "normales" (1,3,4,5,6)
@@ -614,21 +753,23 @@
       const datasets=[];
       if(yIndex>=0){
         datasets.push({
-          label: yVar,
+          label: fieldMapping[yVar] || yVar,
           data: yValues,
           yAxisID:"y",
-          backgroundColor:"rgba(255,99,132,0.5)",
-          borderColor:"rgba(255,99,132,1)",
+          backgroundColor: fieldColors[yVar] || "rgba(200,200,200,0.7)",  // Color fijo o gris por defecto
+  borderColor: fieldColors[yVar]?.replace("0.7", "1") || "rgba(200,200,200,1)",  // Más opaco para el borde
+
           type: yMode
         });
       }
       if(zVar!=="none" && zIndex>=0){
         datasets.push({
-          label:zVar,
+          label:fieldMapping[zVar] || zVar,
           data:zValues,
           yAxisID:"y1",
-          backgroundColor:"rgba(54,162,235,0.5)",
-          borderColor:"rgba(54,162,235,1)",
+          backgroundColor: fieldColors[zVar] || "rgba(200,200,200,0.7)",  // Color fijo o gris por defecto
+  borderColor: fieldColors[zVar]?.replace("0.7", "1") || "rgba(200,200,200,1)",  // Más opaco para el borde
+
           type:zMode
         });
       }

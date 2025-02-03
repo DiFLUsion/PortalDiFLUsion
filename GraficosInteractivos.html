@@ -286,7 +286,7 @@
 
         <!-- GRAFICO 7 -->
         <div class="chart-block">
-          <div class="chart-title">Gráfico 7</div>
+          <div class="chart-title">Gráfico 7: No predefinido</div>
           <div class="control-row">
             <label>Y (Primario):</label>
             <select id="ySelect7"></select>
@@ -315,7 +315,7 @@
 
            <!-- GRAFICO 8 -->
            <div class="chart-block">
-            <div class="chart-title">Gráfico 8</div>
+            <div class="chart-title">Gráfico 8: No predefinido</div>
             <div class="control-row">
               <label>Y (Primario):</label>
               <select id="ySelect8"></select>
@@ -513,7 +513,7 @@
     syncXCheckbox.addEventListener("change", drawAllCharts);
 
     // Al cambiar selects Y y Z
-    for(let i=0; i<6; i++){
+    for(let i=0; i<8; i++){
       ySelects[i].addEventListener("change", drawAllCharts);
       zSelects[i].addEventListener("change", drawAllCharts);
       yTypes[i].addEventListener("change", drawAllCharts);
@@ -606,7 +606,7 @@
         const { yFilter, zFilter } = conditions[i];
 
         headers.forEach(h=>{
-  if(!fieldFuera.has(h)) {  // Filtra los valores que no deben aparecer
+  if(!fieldFuera.has(h) && h !== "lunes")  {  // Filtra los valores que no deben aparecer
     if(yFilter(h)){
       const optY = document.createElement("option");
       optY.value = h;
@@ -625,18 +625,18 @@
       const defaultZ = [...zSelects[i].options].find(opt => opt.value !== "none");
       if (defaultZ) zSelects[i].value = defaultZ.value;
     }
-    // else if (i === 1) { // Gráfico 2
-    //   const defaultZ = [...zSelects[i].options].find(opt => opt.value !== "none");
-    //   if (defaultZ) zSelects[i].value = defaultZ.value;
-    // }
-
-
-
+    else if (i === 3) { // Gráfico 4
+      const defaultZ = [...zSelects[i].options].find(opt => opt.value === "num_brotes");
+      if (defaultZ) {
+        zSelects[i].value = "num_brotes";
+        zTypes[i].value = "line"; // Tipo línea por defecto
+      }
       }
 
       // Ajustes extra (por ejemplo, en G2 filtrar A0..A5 en zSelect2),
       // o preseleccionar algo si deseas.
     }
+  }
 
     function setDefaultDateRange(){
       if(!globalData.length) return;
@@ -757,7 +757,7 @@
           data: yValues,
           yAxisID:"y",
           backgroundColor: fieldColors[yVar] || "rgba(200,200,200,0.7)",  // Color fijo o gris por defecto
-  borderColor: fieldColors[yVar]?.replace("0.7", "1") || "rgba(200,200,200,1)",  // Más opaco para el borde
+          borderColor: fieldColors[yVar]?.replace("0.7", "1") || "rgba(200,200,200,1)",  // Más opaco para el borde
 
           type: yMode
         });
@@ -768,7 +768,7 @@
           data:zValues,
           yAxisID:"y1",
           backgroundColor: fieldColors[zVar] || "rgba(200,200,200,0.7)",  // Color fijo o gris por defecto
-  borderColor: fieldColors[zVar]?.replace("0.7", "1") || "rgba(200,200,200,1)",  // Más opaco para el borde
+          borderColor: fieldColors[zVar]?.replace("0.7", "1") || "rgba(200,200,200,1)",  // Más opaco para el borde
 
           type:zMode
         });
@@ -999,7 +999,7 @@
 
       // Armamos datasets
       const datasets = primaryCols.map((col, idx)=>({
-        label: col,
+        label: fieldMapping[col] || col,
         data: seriesData[col],
         backgroundColor: colorByIndex(idx),
         borderColor: colorByIndex(idx).replace("0.5)", "1)"),
@@ -1009,7 +1009,7 @@
 
       if(zVar!=="none" && zIndex>=0){
         datasets.push({
-          label: zVar,
+          label: fieldMapping[zVar] || zVar,
           data: zData,
           backgroundColor: "rgba(0,200,0,0.5)",
           borderColor: "rgba(0,200,0,1)",

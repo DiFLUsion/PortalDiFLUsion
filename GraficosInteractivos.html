@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visualización de datos DiFLUsion</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 10px;
+      max-width: 1200px;
+    }
+    h1 { margin-bottom: 0.5rem; }
+    #infoRuta { color: #666; margin: 5px 0; }
+    .file-input { margin-bottom: 1rem; }
+    .sync-container { margin: 0.5rem 0; }
+    .date-area {
+      margin: 1rem 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .charts-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr; /* 2 columnas => 2 gráficos por fila */
+      gap: 20px;
+    }
+    .chart-block {
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 4px;
+      background: #f9f9f9;
+    }
+    .chart-title {
+      font-weight: bold;
+      margin: 5px 0;
+    }
+    .control-row {
+      margin-bottom: 0.5rem;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .chart-canvas {
+      max-width: 100%;
+      height: 800px;
+    }
+    input[type="date"] {
+      font-size: 1rem;
+      padding: 4px;
+    }
+
+  </style>
+</head>
+<body>
+  <h1>Visualización interactiva de los factores y resultados de DiFLUsion</h1>
+
+  <!-- 📌 INSTRUCCIONES PARA EL USUARIO -->
+  <div style="background: #eef5ff; padding: 10px; border-left: 4px solid #007bff; margin-bottom: 15px;">
+    <strong>Esta página permite visualizar:</strong>
+    <ul>
+
+          <li><strong>Fecha</strong> (campo: Lunes) en todos los gráficos como variables independiente (eje X).</li>
+
+          <li><strong>Valores decimales de:</strong>
+            <ul>
+              <li> Riesgo</li>
+                <li>Temperatura</li>
+                <li>Fenología</li>
+            </ul>
+            <li><strong>Valores enteros de:</strong>
+              <ul>
+                <li> Recuento anillas.</li>
+                  <li>Recuento de brotes.</li>
+                  <li>Categoría de los brotes: D (Doméstico), W (Silvestre) y C (Cautivo).</li>
+              </ul>
+          <li><strong>Categorías</strong> de Riesgo: A0, A1, A2, A3, A4 y A5</li>
+
+          </ul>
+        </ul>
+      </li>
+
+    </ul>
+  </div>
+
+  <!-- Carga de Excel -->
+
+  <div class="file-input" id="fileUploadContainer">
+    <p id="infoRuta">Es necesario cargar un fichero en formato Excel para visualizar los datos.</p>
+    <input type="file" id="fileInput" accept=".xlsx,.xls" />
+  </div>
+
+  <!-- Panel para seleccionar el campo X (temporal). Por defecto "lunes"
+   Mas abajo he forzado que no se muestre -->
+  <div class="control-row" id="globalXPanel">
+    <label for="globalXSelect">Campo temporal X:</label>
+    <select id="globalXSelect">
+      <!-- Se rellenará en fillSelectors, pero se forzará a "lunes" por defecto -->
+    </select>
+
+  </div>
+
+  <!-- Checkbox para sincronizar el Eje X
+   Mas abajo he forzado que no se muestre -->
+
+  <div class="sync-container">
+    <label>
+      <input type="checkbox" id="syncXCheckbox" />
+      <!-- Descomentar si se usa: Usar el mismo rango de fechas en todos los gráficos -->
+    </label>
+  </div>
+
+  <!-- Inputs de fechas (solo para X="lunes") -->
+  <div class="date-area">
+    <label for="startDate">Inicio:</label>
+    <input type="date" id="startDate" />
+    <label for="endDate">Fin:</label>
+    <input type="date" id="endDate" />
+  </div>
+
+  <!-- Contenedor de gráficos -->
+  <div class="charts-container">
+
+    <!-- GRAFICO 1 -->
+    <div class="chart-block">
+      <div class="chart-title">Gráfico 1: Evolución temporal del riesgo</div>
+      <div class="control-row">
+        <label>Eje primario Y:</label>
+        <select id="ySelect1"></select>
+        <label>Tipo Y:</label>
+        <select id="yType1">
+          <option value="bar">Columnas</option>
+          <option value="line">Líneas</option>
+        </select>
+      </div>
+      <div class="control-row">
+        <label>Eje secundario Y:</label>
+        <select id="zSelect1">
+          <option value="none">Ninguno</option>
+        </select>
+        <label>Tipo Y2:</label>
+        <select id="zType1">
+          <option value="line">Líneas</option>
+          <option value="bar">Columnas</option>
+        </select>
+      </div>
+      <canvas id="chart1" class="chart-canvas"></canvas>
+    </div>
+
+    <!-- GRAFICO 2 -->
+    <div class="chart-block">
+      <div class="chart-title">Gráfico 2: Evolución temporal de las categorías</div>
+      <div class="control-row">
+        <label>Tipo Serie:</label>
+        <select id="yType2">
+          <option value="bar">Columnas</option>
+          <option value="line">Líneas</option>
+        </select>
+      </div>
+      <div class="control-row">
+        <label>Eje Secundario:</label>
+        <select id="zSelect2">
+          <option value="none">Ninguno</option>
+        </select>
+        <label>Tipo Z:</label>
+        <select id="zType2">
+          <option value="line">Líneas</option>
+          <option value="bar">Columnas</option>
+        </select>
+      </div>
+      <!-- ySelect2 oculto para no causar error -->
+      <select id="ySelect2" style="display:none;"></select>
+      <canvas id="chart2" class="chart-canvas"></canvas>
+    </div>
+
+    <!-- GRAFICO 3 -->
+    <div class="chart-block">
+      <div class="chart-title">Gráfico 3</div>
+      <div class="control-row">
+        <label>Y (Primario):</label>
+        <select id="ySelect3"></select>
+        <label>Tipo Y:</label>
+        <select id="yType3">
+          <option value="bar">Columnas</option>
+          <option value="line">Líneas</option>
+        </select>
+      </div>
+      <div class="control-row">
+        <label>Z (Secundario):</label>
+        <select id="zSelect3">
+          <option value="none">Ninguno</option>
+        </select>
+        <label>Tipo Z:</label>
+        <select id="zType3">
+          <option value="bar">Columnas</option>
+          <option value="line">Líneas</option>
+
+        </select>
+      </div>
+      <canvas id="chart3" class="chart-canvas"></canvas>
+    </div>
+
+    <!-- GRAFICO 4 -->
+    <div class="chart-block">
+      <div class="chart-title">Gráfico 4</div>
+      <div class="control-row">
+        <label>Tipo Y:</label>
+        <select id="yType4">
+          <option value="bar">Columnas</option>
+          <option value="line">Líneas</option>
+        </select>
+      </div>
+      <div class="control-row">
+        <label>Z (Secundario):</label>
+        <select id="zSelect4">
+          <option value="none">Ninguno</option>
+        </select>
+        <label>Tipo Z:</label>
+        <select id="zType4">
+          <option value="bar">Columnas</option>
+          <option value="line">Líneas</option>
+        </select>
+      </div>
+      <!-- Para no causar error en JS, define ySelect4 pero oculto -->
+      <select id="ySelect4" style="display:none;"></select>
+      <canvas id="chart4" class="chart-canvas"></canvas>
+    </div>
+
+    <!-- GRAFICO 5 -->
+    <div class="chart-block">
+      <div class="chart-title">Gráfico 5</div>
+      <div class="control-row">
+        <label>Y (Primario):</label>
+        <select id="ySelect5"></select>
+        <label>Tipo Y:</label>
+        <select id="yType5">
+          <option value="bar">Columnas</option>
+          <option value="line">Líneas</option>
+        </select>
+      </div>
+      <div class="control-row">
+        <label>Z (Secundario):</label>
+        <select id="zSelect5">
+          <option value="none">Ninguno</option>
+        </select>
+        <label>Tipo Z:</label>
+        <select id="zType5">
+          <option value="line">Líneas</option>
+          <option value="bar">Columnas</option>
+        </select>
+      </div>
+      <canvas id="chart5" class="chart-canvas"></canvas>
+    </div>
+
+    <!-- GRAFICO 6 -->
+    <div class="chart-block">
+      <div class="chart-title">Gráfico 6</div>
+      <div class="control-row">
+        <label>Y (Primario):</label>
+        <select id="ySelect6"></select>
+        <label>Tipo Y:</label>
+        <select id="yType6">
+          <option value="line">Líneas</option>
+          <option value="bar">Columnas</option>
+
+        </select>
+      </div>
+      <div class="control-row">
+        <label>Z (Secundario):</label>
+        <select id="zSelect6">
+          <option value="none">Ninguno</option>
+        </select>
+        <label>Tipo Z:</label>
+        <select id="zType6">
+          <option value="line">Líneas</option>
+          <option value="bar">Columnas</option>
+
+        </select>
+      </div>
+      <canvas id="chart6" class="chart-canvas"></canvas>
+    </div>
+
+  </div>
+
+  <script>
+    let globalData = [];
+    let chart1=null, chart2=null, chart3=null, chart4=null, chart5=null, chart6=null;
+
+    const fileInput = document.getElementById("fileInput");
+    const infoRuta  = document.getElementById("infoRuta");
+
+
+    const startDateInput = document.getElementById("startDate");
+    const endDateInput   = document.getElementById("endDate");
+
+    // Fuerzo a que no se muestren los apartados relacionados con la sincronía de datos temporales
+    document.getElementById("globalXPanel").style.display = "none";
+    document.getElementById("globalXSelect").style.display = "none";
+    document.getElementById("syncXCheckbox").style.display = "none";
+
+
+
+
+    // En lugar de un xSelect por gráfico, forzamos su uso a "lunes"
+    // o lo que el usuario escoja en el globalXSelect.
+
+    // Condiciones de cada gráfico (sólo para Y/Z)
+    const conditions = [
+      // G1
+      { yFilter: (h) => h.toLowerCase().startsWith("valor"),
+        zFilter: (h) => h.toLowerCase().includes("temperatura") },
+      // G2
+      { yFilter: (h) => true,
+        zFilter: (h) => true },
+      // G3
+      { yFilter: (h) => h.toLowerCase().startsWith("valor"),
+        zFilter: (h) => h.toLowerCase().startsWith("fenologia") },
+      // G4
+      { yFilter: (h) => true,
+        zFilter: (h) => true },
+      // G5
+      { yFilter: (h) => h.toLowerCase().startsWith("num_anillas"),
+        zFilter: (h) => true },
+      // G6
+      { yFilter: (h) => h.toLowerCase().startsWith("temperatura"),
+        zFilter: (h) => h.toLowerCase().startsWith("dias") },
+    ];
+
+
+    // Arrays de selects (sólo Y y Z por gráfico)
+    const ySelects = [
+      document.getElementById("ySelect1"),
+      document.getElementById("ySelect2"),
+      document.getElementById("ySelect3"),
+      document.getElementById("ySelect4"),
+      document.getElementById("ySelect5"),
+      document.getElementById("ySelect6"),
+    ];
+    const yTypes = [
+      document.getElementById("yType1"),
+      document.getElementById("yType2"),
+      document.getElementById("yType3"),
+      document.getElementById("yType4"),
+      document.getElementById("yType5"),
+      document.getElementById("yType6"),
+    ];
+    const zSelects = [
+      document.getElementById("zSelect1"),
+      document.getElementById("zSelect2"),
+      document.getElementById("zSelect3"),
+      document.getElementById("zSelect4"),
+      document.getElementById("zSelect5"),
+      document.getElementById("zSelect6"),
+    ];
+    const zTypes = [
+      document.getElementById("zType1"),
+      document.getElementById("zType2"),
+      document.getElementById("zType3"),
+      document.getElementById("zType4"),
+      document.getElementById("zType5"),
+      document.getElementById("zType6"),
+    ];
+
+    // Canvas
+    const chartCanvases = [
+      document.getElementById("chart1"),
+      document.getElementById("chart2"),
+      document.getElementById("chart3"),
+      document.getElementById("chart4"),
+      document.getElementById("chart5"),
+      document.getElementById("chart6"),
+    ];
+
+    // Eventos
+    fileInput.addEventListener("change", handleFile);
+    globalXSelect.addEventListener("change", drawAllCharts);
+    syncXCheckbox.addEventListener("change", drawAllCharts);
+
+    // Al cambiar selects Y y Z
+    for(let i=0; i<6; i++){
+      ySelects[i].addEventListener("change", drawAllCharts);
+      zSelects[i].addEventListener("change", drawAllCharts);
+      yTypes[i].addEventListener("change", drawAllCharts);
+      zTypes[i].addEventListener("change", drawAllCharts);
+    }
+    startDateInput.addEventListener("change", drawAllCharts);
+    endDateInput.addEventListener("change", drawAllCharts);
+
+    // Paleta de colores (p.e. para G2 multi-series)
+    const palette = [
+      "rgba(255,99,132,0.5)",
+      "rgba(54,162,235,0.5)",
+      "rgba(255,206,86,0.5)",
+      "rgba(75,192,192,0.5)",
+      "rgba(153,102,255,0.5)",
+      "rgba(255,159,64,0.5)"
+    ];
+    function colorByIndex(i){
+      return palette[i % palette.length];
+    }
+
+    function handleFile(e){
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt)=>{
+        try{
+          parseExcel(evt.target.result);
+          infoRuta.textContent="Archivo cargado correctamente.";
+        }catch(err){
+          infoRuta.textContent="Error procesando Excel: "+err;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+
+
+    function parseExcel(arrayBuffer){
+  const wb = XLSX.read(new Uint8Array(arrayBuffer), {type:'array'});
+
+  let container = document.getElementById('fileUploadContainer');
+  if(!container){
+    container = document.createElement('div');
+    container.id = 'fileUploadContainer';
+    document.body.appendChild(container);
+  }
+
+  const sheetContainer = document.createElement('span');
+  sheetContainer.style.marginLeft = '10px';
+
+  const select = document.createElement('select');
+  wb.SheetNames.forEach(sheetName => {
+    const option = document.createElement('option');
+    option.value = sheetName;
+    option.textContent = sheetName;
+    select.appendChild(option);
+  });
+  sheetContainer.appendChild(select);
+
+  const btn = document.createElement('button');
+  btn.textContent = 'Seleccionar hoja';
+  sheetContainer.appendChild(btn);
+
+  container.appendChild(sheetContainer);
+
+  btn.onclick = function(){
+    const selectedSheet = select.value;
+    const ws = wb.Sheets[selectedSheet];
+    globalData = XLSX.utils.sheet_to_json(ws, { header:1 });
+    sheetContainer.remove();
+
+    fillXSelector();
+    fillYSZSelectors();
+    setDefaultDateRange();
+    drawAllCharts();
+  };
+}
+
+
+
+    // Llenar el selector global X con la opción "lunes" (y si hubiera más en el Excel, podrías listarlas)
+    function fillXSelector(){
+      if(!globalData.length) return;
+      const headers = globalData[0];
+
+      // Limpiamos
+      globalXSelect.innerHTML = "";
+
+      // En este ejemplo, forzamos a "lunes" por defecto. Pero, si quieres,
+      // puedes listar todos los headers y luego forzar a "lunes" si existe.
+      // De manera sencilla, solo dejamos "lunes":
+      const opt = document.createElement("option");
+      opt.value = "lunes";
+      opt.text = "lunes";
+      globalXSelect.appendChild(opt);
+
+      // Si quieres, podrías chequear si "lunes" realmente está en headers y si no, no lo pones.
+      // O podrías añadir más. Aquí lo dejamos fijo.
+      globalXSelect.value = "lunes";
+    }
+
+    // Llenar Y y Z en cada gráfico según conditions
+    function fillYSZSelectors(){
+      if(!globalData.length) return;
+      const headers = globalData[0];
+
+      for(let i=0;i<6;i++){
+        ySelects[i].innerHTML="";
+        zSelects[i].innerHTML="<option value='none'>Ninguno</option>";
+
+        const { yFilter, zFilter } = conditions[i];
+
+        headers.forEach(h=>{
+          if(yFilter(h)){
+            const optY = document.createElement("option");
+            optY.value = h;
+            optY.text  = h;
+            ySelects[i].appendChild(optY);
+          }
+          if(zFilter(h)){
+            const optZ = document.createElement("option");
+            optZ.value = h;
+            optZ.text  = h;
+            zSelects[i].appendChild(optZ);
+          }
+        });// Seleccionar por defecto el eje secundario
+    if (i === 0 || i === 2 || i ===5) { // Gráfico 1 y Gráfico 3
+      const defaultZ = [...zSelects[i].options].find(opt => opt.value !== "none");
+      if (defaultZ) zSelects[i].value = defaultZ.value;
+    }
+    // else if (i === 1) { // Gráfico 2
+    //   const defaultZ = [...zSelects[i].options].find(opt => opt.value !== "none");
+    //   if (defaultZ) zSelects[i].value = defaultZ.value;
+    // }
+
+
+
+      }
+
+      // Ajustes extra (por ejemplo, en G2 filtrar A0..A5 en zSelect2),
+      // o preseleccionar algo si deseas.
+    }
+
+    function setDefaultDateRange(){
+      if(!globalData.length) return;
+      const headers = globalData[0];
+
+      // Tomamos la variable X global (en este ejemplo, "lunes")
+      const xVar = globalXSelect.value;
+      const xIndex = headers.indexOf(xVar);
+      if(xIndex<0) return;
+
+      if(xVar==="lunes"){
+        const times=[];
+        for(let i=1;i<globalData.length;i++){
+          const row=globalData[i];
+          const ms=Date.parse(row[xIndex]);
+          if(!isNaN(ms)) times.push(ms);
+        }
+        if(!times.length) return;
+        const minT=Math.min(...times);
+        const maxT=Math.max(...times);
+
+        // Rellenamos solo si el usuario no puso nada
+        if(!startDateInput.value){
+          startDateInput.value = new Date(minT).toISOString().slice(0,10);
+        }
+        if(!endDateInput.value){
+          endDateInput.value   = new Date(maxT).toISOString().slice(0,10);
+        }
+      }
+    }
+
+    function drawAllCharts(){
+      if(!globalData.length) return;
+      if(chart1) chart1.destroy();
+      if(chart2) chart2.destroy();
+      if(chart3) chart3.destroy();
+      if(chart4) chart4.destroy();
+      if(chart5) chart5.destroy();
+      if(chart6) chart6.destroy();
+
+      chart1 = drawSingleChart(chartCanvases[0], 0, "Gráfico 1");
+      chart2 = drawChart2     (chartCanvases[1], 1, "Gráfico 2");
+      chart3 = drawSingleChart(chartCanvases[2], 2, "Gráfico 3");
+      chart4 = drawChart4(chartCanvases[3], 3, "Gráfico 4");
+      chart5 = drawSingleChart(chartCanvases[4], 4, "Gráfico 5");
+      chart6 = drawSingleChart(chartCanvases[5], 5, "Gráfico 6");
+    }
+
+    // Función genérica para gráficos "normales" (1,3,4,5,6)
+    function drawSingleChart(canvas, chartIndex, title="Gráfico"){
+      const ctx = canvas.getContext("2d");
+      if(!globalData.length) return null;
+      const headers = globalData[0];
+
+      // X: tomado del selector global
+      const xVar = globalXSelect.value || "lunes";
+      const xIndex = headers.indexOf(xVar);
+
+      // Y
+      const yVar = ySelects[chartIndex].value;
+      const yIndex = headers.indexOf(yVar);
+
+      // Z
+      const zVar = zSelects[chartIndex].value;
+      const zIndex = headers.indexOf(zVar);
+
+      // Tipos
+      const yMode = yTypes[chartIndex].value;
+      const zMode = zTypes[chartIndex].value;
+
+      // Convertir X y ordenar
+      const rowArray = [];
+      for(let i=1;i<globalData.length;i++){
+        const row=globalData[i];
+        if(!row || row.length<headers.length) continue;
+        let xMsOrNum;
+        if(xVar==="lunes"){
+          xMsOrNum = Date.parse(row[xIndex]);
+        } else {
+          xMsOrNum = parseFloat(row[xIndex]);
+        }
+        if(isNaN(xMsOrNum)) continue;
+        rowArray.push({ xMsOrNum, row });
+      }
+      rowArray.sort((a,b)=> a.xMsOrNum - b.xMsOrNum);
+
+      // Filtrar rango si X="lunes" y syncXCheckbox (aunque sea global)
+      let sVal=-Infinity, eVal=Infinity;
+      if(xVar==="lunes"){
+        const sDate=Date.parse(startDateInput.value);
+        const eDate=Date.parse(endDateInput.value);
+        if(!isNaN(sDate)) sVal=sDate;
+        if(!isNaN(eDate)) eVal=eDate;
+      }
+      const filtered = rowArray.filter(obj=> obj.xMsOrNum>=sVal && obj.xMsOrNum<=eVal );
+
+      // Extraer
+      const xValues=[];
+      const yValues=[];
+      const zValues=[];
+      for(let obj of filtered){
+        xValues.push(obj.row[xIndex]);
+        if(yIndex>=0) yValues.push(obj.row[yIndex]);
+        if(zVar!=="none" && zIndex>=0) {
+          zValues.push(obj.row[zIndex]);
+        }
+      }
+
+      // Datasets
+      const datasets=[];
+      if(yIndex>=0){
+        datasets.push({
+          label: yVar,
+          data: yValues,
+          yAxisID:"y",
+          backgroundColor:"rgba(255,99,132,0.5)",
+          borderColor:"rgba(255,99,132,1)",
+          type: yMode
+        });
+      }
+      if(zVar!=="none" && zIndex>=0){
+        datasets.push({
+          label:zVar,
+          data:zValues,
+          yAxisID:"y1",
+          backgroundColor:"rgba(54,162,235,0.5)",
+          borderColor:"rgba(54,162,235,1)",
+          type:zMode
+        });
+      }
+
+      return new Chart(ctx,{
+        data:{
+          labels: xValues,
+          datasets
+        },
+        options:{
+          responsive:true,
+          plugins:{
+            title:{
+              display:true,
+              text:title
+            }
+          },
+          scales:{
+            y:{
+              type:"linear",
+              display:true,
+              position:"left"
+            },
+            y1:{
+              type:"linear",
+              display:(zVar!=="none"),
+              position:"right"
+            }
+          },
+          elements:{
+            line:{
+              tension:0.1,
+              fill:false
+            }
+          }
+        }
+      });
+    }
+
+    // Gráfico 2 (A0..A5 en eje primario, y "zSelect2" en secundario)
+    function drawChart2(canvas, chartIndex, title="Gráfico 2"){
+      const ctx = canvas.getContext("2d");
+      if(!globalData.length) return null;
+      const headers = globalData[0];
+
+      // X global
+      const xVar = globalXSelect.value || "lunes";
+      const xIndex = headers.indexOf(xVar);
+
+      // Tipo general (line/bar) para A0..A5
+      const chartType = yTypes[chartIndex].value;
+      // Eje secundario: si zSelect2 != 'none', se graficará en y1
+      const zVar = zSelects[chartIndex].value;
+      const zType = zTypes[chartIndex].value;
+      const zIndex = headers.indexOf(zVar);
+
+      // A0..A5
+      const primaryCols = ["A0","A1","A2","A3","A4","A5"];
+
+      // Parsear X y ordenar
+      const rowArray=[];
+      for(let i=1;i<globalData.length;i++){
+        const row=globalData[i];
+        if(!row || row.length<headers.length) continue;
+        let xMsOrNum;
+        if(xVar==="lunes"){
+          xMsOrNum = Date.parse(row[xIndex]);
+        } else {
+          xMsOrNum = parseFloat(row[xIndex]);
+        }
+        if(isNaN(xMsOrNum)) continue;
+        rowArray.push({ xMsOrNum, row });
+      }
+      rowArray.sort((a,b)=> a.xMsOrNum - b.xMsOrNum);
+
+      // Filtrar por fecha
+      let sVal=-Infinity, eVal=Infinity;
+      if(xVar==="lunes"){
+        const sDate=Date.parse(startDateInput.value);
+        const eDate=Date.parse(endDateInput.value);
+        if(!isNaN(sDate)) sVal=sDate;
+        if(!isNaN(eDate)) eVal=eDate;
+      }
+      const filtered = rowArray.filter(obj=> obj.xMsOrNum>=sVal && obj.xMsOrNum<=eVal);
+
+      const xValues=[];
+      const seriesData={};
+      primaryCols.forEach(col => { seriesData[col] = []; });
+
+      let zData=[];
+
+      for(let obj of filtered){
+        xValues.push(obj.row[xIndex]);
+
+        primaryCols.forEach(col=>{
+          const cIndex = headers.indexOf(col);
+          seriesData[col].push(obj.row[cIndex]);
+        });
+
+        if(zVar!=="none" && zIndex>=0){
+          zData.push(obj.row[zIndex]);
+        }
+      }
+
+      // Armamos datasets
+      const datasets = primaryCols.map((col, idx)=>({
+        label: col,
+        data: seriesData[col],
+        backgroundColor: colorByIndex(idx),
+        borderColor: colorByIndex(idx).replace("0.5)", "1)"),
+        type: chartType,
+        yAxisID: "y"
+      }));
+
+      if(zVar!=="none" && zIndex>=0){
+        datasets.push({
+          label: zVar,
+          data: zData,
+          backgroundColor: "rgba(0,200,0,0.5)",
+          borderColor: "rgba(0,200,0,1)",
+          type: zType,
+          yAxisID: "y1"
+        });
+      }
+
+      return new Chart(ctx,{
+        data:{
+          labels: xValues,
+          datasets
+        },
+        options:{
+          responsive:true,
+          plugins:{
+            title:{
+              display:true,
+              text:title
+            }
+          },
+          scales:{
+            y:{
+              type:"linear",
+              display:true,
+              position:"left"
+            },
+            y1:{
+              type:"linear",
+              display:true,
+              position:"right"
+            }
+          },
+          elements:{
+            line:{
+              tension:0.1,
+              fill:false
+            }
+          }
+        }
+      });
+    }
+
+
+
+      // Gráfico 2 (A0..A5 en eje primario, y "zSelect2" en secundario)
+      function drawChart4(canvas, chartIndex, title="Gráfico 4"){
+      const ctx = canvas.getContext("2d");
+      if(!globalData.length) return null;
+      const headers = globalData[0];
+
+      // X global
+      const xVar = globalXSelect.value || "lunes";
+      const xIndex = headers.indexOf(xVar);
+
+      // Tipo general (line/bar) para A0..A5
+      const chartType = yTypes[chartIndex].value;
+      // Eje secundario: si zSelect2 != 'none', se graficará en y1
+      const zVar = zSelects[chartIndex].value;
+      const zType = zTypes[chartIndex].value;
+      const zIndex = headers.indexOf(zVar);
+
+      // A0..A5
+      const primaryCols = ["W","D","C"];
+
+      // Parsear X y ordenar
+      const rowArray=[];
+      for(let i=1;i<globalData.length;i++){
+        const row=globalData[i];
+        if(!row || row.length<headers.length) continue;
+        let xMsOrNum;
+        if(xVar==="lunes"){
+          xMsOrNum = Date.parse(row[xIndex]);
+        } else {
+          xMsOrNum = parseFloat(row[xIndex]);
+        }
+        if(isNaN(xMsOrNum)) continue;
+        rowArray.push({ xMsOrNum, row });
+      }
+      rowArray.sort((a,b)=> a.xMsOrNum - b.xMsOrNum);
+
+      // Filtrar por fecha
+      let sVal=-Infinity, eVal=Infinity;
+      if(xVar==="lunes"){
+        const sDate=Date.parse(startDateInput.value);
+        const eDate=Date.parse(endDateInput.value);
+        if(!isNaN(sDate)) sVal=sDate;
+        if(!isNaN(eDate)) eVal=eDate;
+      }
+      const filtered = rowArray.filter(obj=> obj.xMsOrNum>=sVal && obj.xMsOrNum<=eVal);
+
+      const xValues=[];
+      const seriesData={};
+      primaryCols.forEach(col => { seriesData[col] = []; });
+
+      let zData=[];
+
+      for(let obj of filtered){
+        xValues.push(obj.row[xIndex]);
+
+        primaryCols.forEach(col=>{
+          const cIndex = headers.indexOf(col);
+          seriesData[col].push(obj.row[cIndex]);
+        });
+
+        if(zVar!=="none" && zIndex>=0){
+          zData.push(obj.row[zIndex]);
+        }
+      }
+
+      // Armamos datasets
+      const datasets = primaryCols.map((col, idx)=>({
+        label: col,
+        data: seriesData[col],
+        backgroundColor: colorByIndex(idx),
+        borderColor: colorByIndex(idx).replace("0.5)", "1)"),
+        type: chartType,
+        yAxisID: "y"
+      }));
+
+      if(zVar!=="none" && zIndex>=0){
+        datasets.push({
+          label: zVar,
+          data: zData,
+          backgroundColor: "rgba(0,200,0,0.5)",
+          borderColor: "rgba(0,200,0,1)",
+          type: zType,
+          yAxisID: "y1"
+        });
+      }
+
+      return new Chart(ctx,{
+        data:{
+          labels: xValues,
+          datasets
+        },
+        options:{
+          responsive:true,
+          plugins:{
+            title:{
+              display:true,
+              text:title
+            }
+          },
+          scales:{
+            y:{
+              type:"linear",
+              display:true,
+              position:"left"
+            },
+            y1:{
+              type:"linear",
+              display:true,
+              position:"right"
+            }
+          },
+          elements:{
+            line:{
+              tension:0.1,
+              fill:false
+            }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>

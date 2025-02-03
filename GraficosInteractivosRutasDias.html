@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Visualización de Datos CSV</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.3.0/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .file-inputs, .controls {
+            margin-bottom: 20px;
+        }
+        canvas {
+            max-width: 100%;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Visualización de Datos CSV</h1>
+
+    <div class="file-inputs">
+        <div>
+            <label for="file1">Cargar Primer Archivo CSV (Datos Países):</label>
+            <input type="file" id="file1" accept=".csv">
+        </div>
+        <div>
+            <label for="file2">Cargar Segundo Archivo CSV (Datos Especies):</label>
+            <input type="file" id="file2" accept=".csv">
+        </div>
+    </div>
+
+    <div class="controls">
+        <label for="yField">Seleccionar Campo Y:</label>
+        <select id="yField">
+            <option value="total_registros">Total Registros</option>
+            <option value="suma_riesgo_ruta">Suma Riesgo Ruta</option>
+        </select>
+    </div>
+
+    <input type="range" id="timeSlider" min="0" max="0" step="1" value="0">
+    <span id="sliderValue">Seleccione fecha</span>
+
+    <canvas id="chart1"></canvas>
+    <canvas id="chart2"></canvas>
+
+    <script>
+        let data1 = [], data2 = [];
+        let chart1 = null, chart2 = null;
+        let uniqueDates = [];
+
+        document.getElementById('file1').addEventListener('change', (e) => handleFile(e, 'Pais_A', data1, processData));
+        document.getElementById('file2').addEventListener('change', (e) => handleFile(e, 'Especie_A', data2, processData));
+        document.getElementById('yField').addEventListener('change', processData);
+        document.getElementById('timeSlider').addEventListener('input', updateCharts);
+
+        function handleFile(event, seriesKey, dataset, callback) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Papa.parse(file, {
+                delimiter: ";",
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const requiredColumns = ['Fecha', seriesKey, 'total_registros', 'suma_riesgo_ruta'];
+                    const missingColumns = requiredColumns.filter(col => !results.meta.fields.includes(col));
+                    if (missingColumns.length > 0) {
+                        alert(`El archivo CSV falta las siguientes columnas: ${missingColumns.join(', ')}`);
+                        return;
+                    }
+
+                    dataset.length = 0;
+                    results.data.forEach(row => {
+                        const fecha = parseDate(row.Fecha);
+                        if (fecha) {
+                            dataset.push({
+                                ...row,
+                                Fecha: fecha
+                            });
+                        }
+                    });
+
+                    callback();
+                }
+            });
+        }
+
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+
+            let dt = luxon.DateTime.fromFormat(dateStr.trim(), 'dd/MM/yyyy');
+            if (dt.isValid) return dt.toJSDate();
+
+            dt = luxon.DateTime.fromISO(dateStr.trim());
+            if (dt.isValid) return dt.toJSDate();
+
+            console.warn(`Fecha inválida: ${dateStr}`);
+            return null;
+        }
+
+        function processData() {
+            if (data1.length === 0 || data2.length === 0) return;
+
+            const yField = document.getElementById('yField').value;
+            uniqueDates = [...new Set([...data1, ...data2].map(d => d.Fecha.toISOString().split('T')[0]))].sort();
+
+            document.getElementById('timeSlider').max = uniqueDates.length - 1;
+            document.getElementById('timeSlider').value = 0;
+            updateCharts();
+        }
+
+        function updateCharts() {
+            const timeSlider = document.getElementById('timeSlider');
+            const selectedDate = uniqueDates[timeSlider.value];
+            document.getElementById('sliderValue').textContent = selectedDate;
+
+            const yField = document.getElementById('yField').value;
+            const filteredData1 = data1.filter(d => d.Fecha.toISOString().split('T')[0] === selectedDate);
+            const filteredData2 = data2.filter(d => d.Fecha.toISOString().split('T')[0] === selectedDate);
+
+            const datasets1 = createDatasets(filteredData1, 'Pais_A', yField);
+            const datasets2 = createDatasets(filteredData2, 'Especie_A', yField);
+
+            renderChart('chart1', datasets1, 'Países', selectedDate);
+            renderChart('chart2', datasets2, 'Especies', selectedDate);
+        }
+
+        function createDatasets(data, key, yField) {
+            const grouped = {};
+            data.forEach(row => {
+                if (!grouped[row[key]]) {
+                    grouped[row[key]] = 0;
+                }
+                grouped[row[key]] += row[yField];
+            });
+
+            return Object.entries(grouped).map(([label, value], index) => ({
+                label,
+                data: [value],
+                backgroundColor: getColor(index)
+            }));
+        }
+
+        function renderChart(canvasId, datasets, title, date) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            // Verifica si el gráfico ya existe antes de destruirlo
+            if (canvasId === 'chart1' && chart1) {
+                chart1.destroy();
+            } else if (canvasId === 'chart2' && chart2) {
+                chart2.destroy();
+            }
+
+            const newChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [date],
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Registros por ${title}`
+                        },
+                        legend: {
+                            display: true
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            if (canvasId === 'chart1') {
+                chart1 = newChart;
+            } else if (canvasId === 'chart2') {
+                chart2 = newChart;
+            }
+        }
+
+        function getColor(index) {
+            const colors = [
+                'rgba(255, 99, 132, 0.7)',
+                'rgba(54, 162, 235, 0.7)',
+                'rgba(255, 206, 86, 0.7)',
+                'rgba(75, 192, 192, 0.7)',
+                'rgba(153, 102, 255, 0.7)',
+                'rgba(255, 159, 64, 0.7)',
+                'rgba(199, 199, 199, 0.7)'
+            ];
+            return colors[index % colors.length];
+        }
+    </script>
+</body>
+</html>

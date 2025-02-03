@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Visualización de Datos Excel</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.3.0/build/global/luxon.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .file-inputs, .controls {
+            margin-bottom: 20px;
+        }
+        canvas {
+            max-width: 100%;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Visualización de Datos Excel</h1>
+
+    <div class="file-inputs">
+        <div>
+            <label for="fileInput">Cargar Fichero Excel (Contiene las hojas "Pais_A" y "Especie_A"):</label>
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+        </div>
+    </div>
+
+    <div class="controls">
+        <label for="yField">Seleccionar Campo Y:</label>
+        <select id="yField">
+            <option value="total_registros">Total Registros</option>
+            <option value="suma_riesgo_ruta">Suma Riesgo Ruta</option>
+        </select>
+    </div>
+
+    <div class="controls">
+        <label for="startDate">Desde:</label>
+        <input type="date" id="startDate">
+
+        <label for="endDate">Hasta:</label>
+        <input type="date" id="endDate">
+
+        <button onclick="updateCharts()">Actualizar Gráficos</button>
+    </div>
+
+    <canvas id="chart1"></canvas>
+    <canvas id="chart2"></canvas>
+
+    <script>
+        let data1 = [], data2 = [];
+        let chart1 = null, chart2 = null;
+        let uniqueDates = [];
+
+        document.getElementById('fileInput').addEventListener('change', handleExcel);
+        document.getElementById('yField').addEventListener('change', processData);
+
+        function handleExcel(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const arrayBuffer = e.target.result;
+                const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
+
+                // Verificar existencia de las hojas
+                if (!wb.SheetNames.includes("Pais_A") || !wb.SheetNames.includes("Especie_A")) {
+                    alert('El fichero Excel debe contener las hojas "Pais_A" y "Especie_A".');
+                    return;
+                }
+
+                data1 = XLSX.utils.sheet_to_json(wb.Sheets["Pais_A"], { header: true });
+                data2 = XLSX.utils.sheet_to_json(wb.Sheets["Especie_A"], { header: true });
+
+                // Convertir las fechas usando parseDate
+                data1.forEach(row => {
+                    const fecha = parseDate(row.Fecha);
+                    if (fecha) row.Fecha = fecha;
+                });
+                data2.forEach(row => {
+                    const fecha = parseDate(row.Fecha);
+                    if (fecha) row.Fecha = fecha;
+                });
+
+                processData();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseDate(dateInput) {
+  if (dateInput == null) return null;
+
+  // Si es numérico (o una cadena numérica), se asume fecha en formato Excel
+  if (typeof dateInput === "number" || !isNaN(dateInput)) {
+    const serial = Number(dateInput);
+    // Convierte el serial de Excel (sistema 1900) a fecha JS
+    return new Date(Math.round((serial - 25569) * 86400 * 1000));
+  }
+
+  const dateStr = dateInput.toString().trim();
+  let dt = luxon.DateTime.fromFormat(dateStr, 'dd/MM/yyyy');
+  if (dt.isValid) return dt.toJSDate();
+
+  dt = luxon.DateTime.fromISO(dateStr);
+  if (dt.isValid) return dt.toJSDate();
+
+  console.warn(`Fecha inválida: ${dateInput}`);
+  return null;
+}
+
+function processData() {
+    if (data1.length === 0 || data2.length === 0) return;
+
+    const allData = [...data1, ...data2].filter(d => d.Fecha && d.Fecha instanceof Date);
+    uniqueDates = [...new Set(allData.map(d => d.Fecha.toISOString().split('T')[0]))].sort();
+
+    document.getElementById('startDate').min = uniqueDates[0];
+    document.getElementById('startDate').max = uniqueDates[uniqueDates.length - 1];
+    document.getElementById('endDate').min = uniqueDates[0];
+    document.getElementById('endDate').max = uniqueDates[uniqueDates.length - 1];
+
+    document.getElementById('startDate').value = uniqueDates[0];
+    document.getElementById('endDate').value = uniqueDates[uniqueDates.length - 1];
+
+    updateCharts();
+}
+
+        function updateCharts() {
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            const yField = document.getElementById('yField').value;
+
+            const filteredData1 = data1.filter(d => d.Fecha >= startDate && d.Fecha <= endDate);
+            const filteredData2 = data2.filter(d => d.Fecha >= startDate && d.Fecha <= endDate);
+
+            const datasets1 = createDatasets(filteredData1, 'Pais_A', yField);
+            const datasets2 = createDatasets(filteredData2, 'Especie_A', yField);
+
+            renderChart('chart1', datasets1, 'Países');
+            renderChart('chart2', datasets2, 'Especies');
+        }
+
+        function createDatasets(data, key, yField) {
+            const grouped = {};
+            data.forEach(row => {
+                const fechaStr = row.Fecha.toISOString().split('T')[0];
+                if (!grouped[fechaStr]) {
+                    grouped[fechaStr] = {};
+                }
+                if (!grouped[fechaStr][row[key]]) {
+                    grouped[fechaStr][row[key]] = 0;
+                }
+                grouped[fechaStr][row[key]] += row[yField];
+            });
+
+            const labels = Object.keys(grouped).sort();
+            const seriesKeys = [...new Set(data.map(d => d[key]))];
+
+            return seriesKeys.map((seriesKey, index) => ({
+                label: seriesKey,
+                data: labels.map(date => grouped[date][seriesKey] || 0),
+                borderColor: getColor(index),
+                backgroundColor: getColor(index),
+                fill: false,
+                tension: 0.1
+            }));
+        }
+
+        function renderChart(canvasId, datasets, title) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            if (canvasId === 'chart1' && chart1) {
+                chart1.destroy();
+            } else if (canvasId === 'chart2' && chart2) {
+                chart2.destroy();
+            }
+
+            const newChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: uniqueDates,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Evolución de ${title}`
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'day'
+                            }
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            if (canvasId === 'chart1') {
+                chart1 = newChart;
+            } else if (canvasId === 'chart2') {
+                chart2 = newChart;
+            }
+        }
+
+        function getColor(index) {
+            return `hsl(${(index * 30) % 360}, 70%, 50%)`;
+        }
+    </script>
+</body>
+</html>

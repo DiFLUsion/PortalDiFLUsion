@@ -2,11 +2,11 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Visualización de Datos CSV</title>
+    <title>Visualización de Datos Excel</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/luxon@3.3.0/build/global/luxon.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
-    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -23,17 +23,11 @@
 </head>
 <body>
 
-    <h1>Visualización de Datos CSV</h1>
+    <h1>Visualización de Datos Excel</h1>
 
     <div class="file-inputs">
-        <div>
-            <label for="file1">Cargar Primer Archivo CSV (Datos Países):</label>
-            <input type="file" id="file1" accept=".csv">
-        </div>
-        <div>
-            <label for="file2">Cargar Segundo Archivo CSV (Datos Especies):</label>
-            <input type="file" id="file2" accept=".csv">
-        </div>
+        <label for="file">Cargar Archivo Excel:</label>
+        <input type="file" id="file" accept=".xlsx">
     </div>
 
     <div class="controls">
@@ -55,67 +49,80 @@
         let chart1 = null, chart2 = null;
         let uniqueDates = [];
 
-        document.getElementById('file1').addEventListener('change', (e) => handleFile(e, 'Pais_A', data1, processData));
-        document.getElementById('file2').addEventListener('change', (e) => handleFile(e, 'Especie_A', data2, processData));
+        document.getElementById('file').addEventListener('change', handleFile);
         document.getElementById('yField').addEventListener('change', processData);
         document.getElementById('timeSlider').addEventListener('input', updateCharts);
 
-        function handleFile(event, seriesKey, dataset, callback) {
+        function handleFile(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            Papa.parse(file, {
-                delimiter: ";",
-                header: true,
-                dynamicTyping: true,
-                skipEmptyLines: true,
-                complete: function(results) {
-                    const requiredColumns = ['Fecha', seriesKey, 'total_registros', 'suma_riesgo_ruta'];
-                    const missingColumns = requiredColumns.filter(col => !results.meta.fields.includes(col));
-                    if (missingColumns.length > 0) {
-                        alert(`El archivo CSV falta las siguientes columnas: ${missingColumns.join(', ')}`);
-                        return;
-                    }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: "array" });
 
-                    dataset.length = 0;
-                    results.data.forEach(row => {
-                        const fecha = parseDate(row.Fecha);
-                        if (fecha) {
-                            dataset.push({
-                                ...row,
-                                Fecha: fecha
-                            });
-                        }
-                    });
-
-                    callback();
+                // Verificar si existen las hojas necesarias
+                if (!workbook.Sheets["Pais_A"] || !workbook.Sheets["Especie_A"]) {
+                    alert("El archivo Excel debe contener las hojas 'Pais_A' y 'Especie_A'.");
+                    return;
                 }
-            });
+
+                // Convertir las hojas a JSON
+                data1 = XLSX.utils.sheet_to_json(workbook.Sheets["Pais_A"], { raw: true });
+                data2 = XLSX.utils.sheet_to_json(workbook.Sheets["Especie_A"], { raw: true });
+
+                // Verificar columnas necesarias
+                const requiredColumns = ["Fecha", "total_registros", "suma_riesgo_ruta"];
+                if (!requiredColumns.every(col => data1[0]?.hasOwnProperty(col)) ||
+                    !requiredColumns.every(col => data2[0]?.hasOwnProperty(col))) {
+                    alert("Las hojas deben contener las columnas: Fecha, total_registros, suma_riesgo_ruta.");
+                    return;
+                }
+
+                // Convertir fechas
+                data1.forEach(row => row.Fecha = parseDate(row.Fecha));
+                data2.forEach(row => row.Fecha = parseDate(row.Fecha));
+
+                processData();
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         function parseDate(dateStr) {
-            if (!dateStr) return null;
+    if (!dateStr) return null;
 
-            let dt = luxon.DateTime.fromFormat(dateStr.trim(), 'dd/MM/yyyy');
-            if (dt.isValid) return dt.toJSDate();
+    // Verificar si la fecha es un número (caso común en Excel)
+    if (!isNaN(dateStr)) {
+        return new Date(Date.UTC(1900, 0, dateStr - 1)); // Ajuste del sistema de fechas de Excel
+    }
 
-            dt = luxon.DateTime.fromISO(dateStr.trim());
-            if (dt.isValid) return dt.toJSDate();
+    let dt = luxon.DateTime.fromFormat(dateStr.toString().trim(), 'dd/MM/yyyy', { zone: 'utc' });
+    if (dt.isValid) return dt.toJSDate();
 
-            console.warn(`Fecha inválida: ${dateStr}`);
-            return null;
-        }
+    dt = luxon.DateTime.fromISO(dateStr.toString().trim(), { zone: 'utc' });
+    if (dt.isValid) return dt.toJSDate();
 
+    console.warn(`Fecha inválida: ${dateStr}`);
+    return null;
+}
         function processData() {
-            if (data1.length === 0 || data2.length === 0) return;
+    if (data1.length === 0 || data2.length === 0) return;
 
-            const yField = document.getElementById('yField').value;
-            uniqueDates = [...new Set([...data1, ...data2].map(d => d.Fecha.toISOString().split('T')[0]))].sort();
+    const yField = document.getElementById('yField').value;
+    uniqueDates = [...new Set([...data1, ...data2].map(d => d.Fecha?.toISOString().split('T')[0]))].sort();
 
-            document.getElementById('timeSlider').max = uniqueDates.length - 1;
-            document.getElementById('timeSlider').value = 0;
-            updateCharts();
-        }
+    // Buscar el índice de la fecha más cercana a hoy
+    const today = new Date().toISOString().split('T')[0];
+    let closestIndex = uniqueDates.findIndex(date => date >= today);
+
+    // Si no hay fechas futuras, tomar la última disponible
+    if (closestIndex === -1) closestIndex = uniqueDates.length - 1;
+
+    document.getElementById('timeSlider').max = uniqueDates.length - 1;
+    document.getElementById('timeSlider').value = closestIndex; // Selecciona la fecha más cercana a hoy
+    updateCharts();
+}
 
         function updateCharts() {
             const timeSlider = document.getElementById('timeSlider');
@@ -123,8 +130,8 @@
             document.getElementById('sliderValue').textContent = selectedDate;
 
             const yField = document.getElementById('yField').value;
-            const filteredData1 = data1.filter(d => d.Fecha.toISOString().split('T')[0] === selectedDate);
-            const filteredData2 = data2.filter(d => d.Fecha.toISOString().split('T')[0] === selectedDate);
+            const filteredData1 = data1.filter(d => d.Fecha?.toISOString().split('T')[0] === selectedDate);
+            const filteredData2 = data2.filter(d => d.Fecha?.toISOString().split('T')[0] === selectedDate);
 
             const datasets1 = createDatasets(filteredData1, 'Pais_A', yField);
             const datasets2 = createDatasets(filteredData2, 'Especie_A', yField);
@@ -152,7 +159,6 @@
         function renderChart(canvasId, datasets, title, date) {
             const ctx = document.getElementById(canvasId).getContext('2d');
 
-            // Verifica si el gráfico ya existe antes de destruirlo
             if (canvasId === 'chart1' && chart1) {
                 chart1.destroy();
             } else if (canvasId === 'chart2' && chart2) {

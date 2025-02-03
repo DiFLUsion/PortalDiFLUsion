@@ -402,63 +402,41 @@
       return palette[i % palette.length];
     }
 
-    function handleFile(e){
-      const file = e.target.files[0];
-      if(!file) return;
-      const reader = new FileReader();
-      reader.onload = (evt)=>{
-        try{
-          parseExcel(evt.target.result);
-          infoRuta.textContent="Archivo cargado correctamente.";
-        }catch(err){
-          infoRuta.textContent="Error procesando Excel: "+err;
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-
-
-    function parseExcel(arrayBuffer){
-  const wb = XLSX.read(new Uint8Array(arrayBuffer), {type:'array'});
-
-  let container = document.getElementById('fileUploadContainer');
-  if(!container){
-    container = document.createElement('div');
-    container.id = 'fileUploadContainer';
-    document.body.appendChild(container);
+    function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        parseExcel(evt.target.result);
+        infoRuta.textContent = "Archivo cargado correctamente.";
+      } catch (err) {
+        infoRuta.textContent = "Error procesando Excel: " + err;
+      }
+    };
+    reader.readAsArrayBuffer(file);
   }
 
-  const sheetContainer = document.createElement('span');
-  sheetContainer.style.marginLeft = '10px';
+  function parseExcel(arrayBuffer) {
+    const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' });
 
-  const select = document.createElement('select');
-  wb.SheetNames.forEach(sheetName => {
-    const option = document.createElement('option');
-    option.value = sheetName;
-    option.textContent = sheetName;
-    select.appendChild(option);
-  });
-  sheetContainer.appendChild(select);
+    // Verificar si la hoja 'tabla_resumen' existe
+    if (!wb.SheetNames.includes('tabla_resumen')) {
+      infoRuta.textContent = "Error: No se encontró la hoja 'tabla_resumen'.";
+      return;
+    }
 
-  const btn = document.createElement('button');
-  btn.textContent = 'Seleccionar hoja';
-  sheetContainer.appendChild(btn);
-
-  container.appendChild(sheetContainer);
-
-  btn.onclick = function(){
-    const selectedSheet = select.value;
-    const ws = wb.Sheets[selectedSheet];
-    globalData = XLSX.utils.sheet_to_json(ws, { header:1 });
-    sheetContainer.remove();
+    // Seleccionar automáticamente la hoja 'tabla_resumen'
+    const ws = wb.Sheets['tabla_resumen'];
+    globalData = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
     fillXSelector();
     fillYSZSelectors();
     setDefaultDateRange();
     drawAllCharts();
-  };
-}
+  }
+
+
 
 
 

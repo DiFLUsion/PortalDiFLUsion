@@ -1,214 +1,205 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Visualización de Datos Excel</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/luxon@3.3.0/build/global/luxon.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-        }
-        .file-inputs, .controls {
-            margin-bottom: 20px;
-        }
-        canvas {
-            max-width: 100%;
-            margin-bottom: 20px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Visualización de Datos Excel</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.3.0/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .file-inputs, .controls { margin-bottom: 20px; }
+    canvas { max-width: 100%; margin-bottom: 20px; }
+  </style>
 </head>
 <body>
+  <h1>Visualización de Datos de las rutas</h1>
 
-    <h1>Visualización de Datos Excel</h1>
+  <div class="file-inputs">
+    <label for="file">Cargar Archivo Excel:</label>
+    <input type="file" id="file" accept=".xlsx">
+  </div>
 
-    <div class="file-inputs">
-        <label for="file">Cargar Archivo Excel:</label>
-        <input type="file" id="file" accept=".xlsx">
-    </div>
+  <div class="controls">
+    <label for="yField">Seleccionar Campo Y:</label>
+    <select id="yField">
+      <option value="total_registros">Total Registros</option>
+      <option value="suma_riesgo_ruta">Suma Riesgo Ruta</option>
+    </select>
+  </div>
 
-    <div class="controls">
-        <label for="yField">Seleccionar Campo Y:</label>
-        <select id="yField">
-            <option value="total_registros">Total Registros</option>
-            <option value="suma_riesgo_ruta">Suma Riesgo Ruta</option>
-        </select>
-    </div>
+  <input type="range" id="timeSlider" min="0" max="0" step="1" value="0">
+  <span id="sliderValue">Seleccione fecha</span>
 
-    <input type="range" id="timeSlider" min="0" max="0" step="1" value="0">
-    <span id="sliderValue">Seleccione fecha</span>
+  <canvas id="chart1"></canvas>
+  <canvas id="chart2"></canvas>
 
-    <canvas id="chart1"></canvas>
-    <canvas id="chart2"></canvas>
+  <script>
+    let data1 = [], data2 = [];
+    let chart1 = null, chart2 = null;
+    let uniqueDates = [];
 
-    <script>
-        let data1 = [], data2 = [];
-        let chart1 = null, chart2 = null;
-        let uniqueDates = [];
+    document.getElementById('file').addEventListener('change', handleFile);
+    document.getElementById('yField').addEventListener('change', processData);
+    document.getElementById('timeSlider').addEventListener('input', updateCharts);
 
-        document.getElementById('file').addEventListener('change', handleFile);
-        document.getElementById('yField').addEventListener('change', processData);
-        document.getElementById('timeSlider').addEventListener('input', updateCharts);
+    function handleFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
 
-        function handleFile(event) {
-            const file = event.target.files[0];
-            if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: "array" });
-
-                // Verificar si existen las hojas necesarias
-                if (!workbook.Sheets["Pais_A"] || !workbook.Sheets["Especie_A"]) {
-                    alert("El archivo Excel debe contener las hojas 'Pais_A' y 'Especie_A'.");
-                    return;
-                }
-
-                // Convertir las hojas a JSON
-                data1 = XLSX.utils.sheet_to_json(workbook.Sheets["Pais_A"], { raw: true });
-                data2 = XLSX.utils.sheet_to_json(workbook.Sheets["Especie_A"], { raw: true });
-
-                // Verificar columnas necesarias
-                const requiredColumns = ["Fecha", "total_registros", "suma_riesgo_ruta"];
-                if (!requiredColumns.every(col => data1[0]?.hasOwnProperty(col)) ||
-                    !requiredColumns.every(col => data2[0]?.hasOwnProperty(col))) {
-                    alert("Las hojas deben contener las columnas: Fecha, total_registros, suma_riesgo_ruta.");
-                    return;
-                }
-
-                // Convertir fechas
-                data1.forEach(row => row.Fecha = parseDate(row.Fecha));
-                data2.forEach(row => row.Fecha = parseDate(row.Fecha));
-
-                processData();
-            };
-            reader.readAsArrayBuffer(file);
+        if (!workbook.Sheets["Pais_A"] || !workbook.Sheets["Especie_A"]) {
+          alert("El archivo Excel debe contener las hojas 'Pais_A' y 'Especie_A'.");
+          return;
         }
 
-        function parseDate(dateStr) {
-    if (!dateStr) return null;
+        data1 = XLSX.utils.sheet_to_json(workbook.Sheets["Pais_A"], { raw: true });
+        data2 = XLSX.utils.sheet_to_json(workbook.Sheets["Especie_A"], { raw: true });
 
-    // Verificar si la fecha es un número (caso común en Excel)
-    if (!isNaN(dateStr)) {
-        return new Date(Date.UTC(1900, 0, dateStr - 1)); // Ajuste del sistema de fechas de Excel
+        if (!Array.isArray(data1) || !Array.isArray(data2) || data1.length === 0 || data2.length === 0) {
+          alert("Las hojas no contienen datos.");
+          return;
+        }
+
+        const requiredCommon = ["Fecha", "total_registros", "suma_riesgo_ruta"];
+        const hasCommon1 = requiredCommon.every(c => Object.prototype.hasOwnProperty.call(data1[0], c));
+        const hasCommon2 = requiredCommon.every(c => Object.prototype.hasOwnProperty.call(data2[0], c));
+        const hasKey1 = Object.prototype.hasOwnProperty.call(data1[0], "Pais_A");
+        const hasKey2 = Object.prototype.hasOwnProperty.call(data2[0], "Especie_A");
+
+        if (!hasCommon1 || !hasKey1) {
+          alert("La hoja 'Pais_A' debe tener columnas: Fecha, total_registros, suma_riesgo_ruta y Pais_A.");
+          return;
+        }
+        if (!hasCommon2 || !hasKey2) {
+          alert("La hoja 'Especie_A' debe tener columnas: Fecha, total_registros, suma_riesgo_ruta y Especie_A.");
+          return;
+        }
+
+        data1.forEach(row => row.Fecha = parseDate(row.Fecha));
+        data2.forEach(row => row.Fecha = parseDate(row.Fecha));
+
+        processData();
+      };
+      reader.readAsArrayBuffer(file);
     }
 
-    let dt = luxon.DateTime.fromFormat(dateStr.toString().trim(), 'dd/MM/yyyy', { zone: 'utc' });
-    if (dt.isValid) return dt.toJSDate();
+    function parseDate(value) {
+      if (value == null || value === '') return null;
+      if (typeof value === 'number') {
+        return new Date(Math.round((value - 25569) * 86400 * 1000));
+      }
+      const s = String(value).trim();
+      let dt = luxon.DateTime.fromFormat(s, 'dd/MM/yyyy', { zone: 'utc' });
+      if (dt.isValid) return dt.toJSDate();
+      dt = luxon.DateTime.fromISO(s, { zone: 'utc' });
+      if (dt.isValid) return dt.toJSDate();
+      console.warn('Fecha inválida:', value);
+      return null;
+    }
 
-    dt = luxon.DateTime.fromISO(dateStr.toString().trim(), { zone: 'utc' });
-    if (dt.isValid) return dt.toJSDate();
+    function processData() {
+      if (data1.length === 0 || data2.length === 0) return;
 
-    console.warn(`Fecha inválida: ${dateStr}`);
-    return null;
-}
-        function processData() {
-    if (data1.length === 0 || data2.length === 0) return;
+      uniqueDates = [...new Set(
+        [...data1, ...data2]
+          .map(d => (d.Fecha instanceof Date) ? d.Fecha.toISOString().slice(0, 10) : null)
+          .filter(Boolean)
+      )].sort();
 
-    const yField = document.getElementById('yField').value;
-    uniqueDates = [...new Set([...data1, ...data2].map(d => d.Fecha?.toISOString().split('T')[0]))].sort();
+      if (uniqueDates.length === 0) {
+        alert('No hay fechas válidas en las hojas.');
+        return;
+      }
 
-    // Buscar el índice de la fecha más cercana a hoy
-    const today = new Date().toISOString().split('T')[0];
-    let closestIndex = uniqueDates.findIndex(date => date >= today);
+      const today = new Date().toISOString().slice(0, 10);
+      let idx = uniqueDates.findIndex(d => d >= today);
+      if (idx === -1) idx = uniqueDates.length - 1;
 
-    // Si no hay fechas futuras, tomar la última disponible
-    if (closestIndex === -1) closestIndex = uniqueDates.length - 1;
+      const ts = document.getElementById('timeSlider');
+      ts.max = uniqueDates.length - 1;
+      ts.value = idx;
 
-    document.getElementById('timeSlider').max = uniqueDates.length - 1;
-    document.getElementById('timeSlider').value = closestIndex; // Selecciona la fecha más cercana a hoy
-    updateCharts();
-}
+      updateCharts();
+    }
 
-        function updateCharts() {
-            const timeSlider = document.getElementById('timeSlider');
-            const selectedDate = uniqueDates[timeSlider.value];
-            document.getElementById('sliderValue').textContent = selectedDate;
+    function updateCharts() {
+      if (!uniqueDates || uniqueDates.length === 0) return;
 
-            const yField = document.getElementById('yField').value;
-            const filteredData1 = data1.filter(d => d.Fecha?.toISOString().split('T')[0] === selectedDate);
-            const filteredData2 = data2.filter(d => d.Fecha?.toISOString().split('T')[0] === selectedDate);
+      const ts = document.getElementById('timeSlider');
+      const selectedDate = uniqueDates[Number(ts.value)];
+      if (!selectedDate) return;
 
-            const datasets1 = createDatasets(filteredData1, 'Pais_A', yField);
-            const datasets2 = createDatasets(filteredData2, 'Especie_A', yField);
+      document.getElementById('sliderValue').textContent = selectedDate;
 
-            renderChart('chart1', datasets1, 'Países', selectedDate);
-            renderChart('chart2', datasets2, 'Especies', selectedDate);
+      const yField = document.getElementById('yField').value;
+
+      const filteredData1 = data1.filter(d => d.Fecha instanceof Date && d.Fecha.toISOString().slice(0,10) === selectedDate);
+      const filteredData2 = data2.filter(d => d.Fecha instanceof Date && d.Fecha.toISOString().slice(0,10) === selectedDate);
+
+      const datasets1 = createDatasets(filteredData1, 'Pais_A', yField);
+      const datasets2 = createDatasets(filteredData2, 'Especie_A', yField);
+
+      renderChart('chart1', datasets1, 'Países', selectedDate);
+      renderChart('chart2', datasets2, 'Especies', selectedDate);
+    }
+
+    function createDatasets(rows, key, yField) {
+      const grouped = new Map();
+      for (const row of rows) {
+        const k = row[key];
+        if (k == null || k === '') continue;
+        const v = Number(row[yField]);
+        if (!Number.isFinite(v)) continue;
+        grouped.set(k, (grouped.get(k) || 0) + v);
+      }
+      return Array.from(grouped.entries()).map(([label, value], idx) => ({
+        label,
+        data: [value],
+        backgroundColor: getColor(idx)
+      }));
+    }
+
+    function renderChart(canvasId, datasets, title, date) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+
+      if (canvasId === 'chart1' && chart1) chart1.destroy();
+      if (canvasId === 'chart2' && chart2) chart2.destroy();
+
+      const newChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: [date], datasets },
+        options: {
+          responsive: true,
+          plugins: {
+            title: { display: true, text: `Registros por ${title}` },
+            legend: { display: true }
+          },
+          scales: { y: { beginAtZero: true } }
         }
+      });
 
-        function createDatasets(data, key, yField) {
-            const grouped = {};
-            data.forEach(row => {
-                if (!grouped[row[key]]) {
-                    grouped[row[key]] = 0;
-                }
-                grouped[row[key]] += row[yField];
-            });
+      if (canvasId === 'chart1') chart1 = newChart;
+      if (canvasId === 'chart2') chart2 = newChart;
+    }
 
-            return Object.entries(grouped).map(([label, value], index) => ({
-                label,
-                data: [value],
-                backgroundColor: getColor(index)
-            }));
-        }
-
-        function renderChart(canvasId, datasets, title, date) {
-            const ctx = document.getElementById(canvasId).getContext('2d');
-
-            if (canvasId === 'chart1' && chart1) {
-                chart1.destroy();
-            } else if (canvasId === 'chart2' && chart2) {
-                chart2.destroy();
-            }
-
-            const newChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: [date],
-                    datasets: datasets
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: `Registros por ${title}`
-                        },
-                        legend: {
-                            display: true
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
-                }
-            });
-
-            if (canvasId === 'chart1') {
-                chart1 = newChart;
-            } else if (canvasId === 'chart2') {
-                chart2 = newChart;
-            }
-        }
-
-        function getColor(index) {
-            const colors = [
-                'rgba(255, 99, 132, 0.7)',
-                'rgba(54, 162, 235, 0.7)',
-                'rgba(255, 206, 86, 0.7)',
-                'rgba(75, 192, 192, 0.7)',
-                'rgba(153, 102, 255, 0.7)',
-                'rgba(255, 159, 64, 0.7)',
-                'rgba(199, 199, 199, 0.7)'
-            ];
-            return colors[index % colors.length];
-        }
-    </script>
+    function getColor(index) {
+      const colors = [
+        'rgba(255, 99, 132, 0.7)',
+        'rgba(54, 162, 235, 0.7)',
+        'rgba(255, 206, 86, 0.7)',
+        'rgba(75, 192, 192, 0.7)',
+        'rgba(153, 102, 255, 0.7)',
+        'rgba(255, 159, 64, 0.7)',
+        'rgba(199, 199, 199, 0.7)'
+      ];
+      return colors[index % colors.length];
+    }
+  </script>
 </body>
 </html>
